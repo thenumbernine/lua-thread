@@ -8,6 +8,13 @@ require 'ffi.req' 'c.unistd'	-- sysconf
 local errno = require 'ffi.req' 'c.errno'
 
 
+local threadFuncTypeName = 'void*(*)(void*)'
+local threadFuncType = ffi.typeof(threadFuncTypeName)
+
+local voidp = ffi.typeof'void*'
+local voidp_1 = ffi.typeof'void*[1]'
+local pthread_t_1 = ffi.typeof'pthread_t[1]'
+
 local function pthread_assert(err, msg)
 	if err == 0 then return end
 	error(ffi.string(ffi.C.strerror(err))..(msg and ' '..msg or ''))
@@ -15,8 +22,6 @@ end
 
 
 local Thread = class()
-
-local threadFuncType = 'void*(*)(void*)'
 
 --[[
 code = Lua code to load and run on the new thread
@@ -39,7 +44,7 @@ local run = function(arg)
 end
 
 local ffi = require 'ffi'
-local runClosure = ffi.cast(']]..threadFuncType..[[', run)
+local runClosure = ffi.cast(']]..threadFuncTypeName..[[', run)
 -- just in case luajit gc's this
 -- in its docs luajit warns that you have to gc the closures manually, so I think I'm safe (except for leaking memory)
 _G.run = run
@@ -54,22 +59,22 @@ return runClosure
 	if not (argtype == 'nil' or argtype == 'cdata') then
 		error("I don't know how to pass arg of type "..argtype.." into a new thread")
 	end
-	arg = ffi.cast('void*', arg)
+	arg = ffi.cast(voidp, arg)
 
-	local result = ffi.new'pthread_t[1]'
+	local result = ffi.new(pthread_t_1)
 	pthread_assert(pthread.pthread_create(result, nil, funcptr, arg), 'pthread_create')
 	self.id = result[0]
 end
 
 function Thread:join()
-	local result = ffi.new'void*[1]'
+	local result = ffi.new(voidp_1)
 	pthread_assert(pthread.pthread_join(self.id, result), 'pthread_join')
 	return result[0]
 end
 
 -- should be called from the thread
 function Thread:exit(value)
-	pthread.pthread_exit(ffi.cast('void*', value))
+	pthread.pthread_exit(ffi.cast(voidp, value))
 end
 
 function Thread:detach()
