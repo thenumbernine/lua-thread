@@ -1,11 +1,22 @@
 -- posix threads library
 require 'ext.gc'	-- enable __gc for Lua tables in LuaJIT
 local ffi = require 'ffi'
-local pthread = require 'ffi.req' 'c.pthread'
 local class = require 'ext.class'
 local Lua = require 'lua'
+local pthread = require 'ffi.req' 'c.pthread'
+require 'ffi.req' 'c.unistd'	-- sysconf
+local errno = require 'ffi.req' 'c.errno'
+
+
+local function pthread_assert(err, msg)
+	if err == 0 then return end
+	error(ffi.string(ffi.C.strerror(err))..(msg and ' '..msg or ''))
+end
+
 
 local Thread = class()
+
+local threadFuncType = 'void*(*)(void*)'
 
 --[[
 code = Lua code to load and run on the new thread
@@ -28,20 +39,28 @@ local run = function(arg)
 end
 
 local ffi = require 'ffi'
-local runClosure = ffi.cast('void *(*)(void *)', run)
+local runClosure = ffi.cast(']]..threadFuncType..[[', run)
 -- just in case luajit gc's this
 -- in its docs luajit warns that you have to gc the closures manually, so I think I'm safe (except for leaking memory)
 _G.run = run
 _G.runClosure = runClosure
 return runClosure
 ]])
-	self.lua(code)
 
-	self.funcptr = ffi.cast('void*(*)(void*)', funcptr)
-	self.id = ffi.new'pthread_t[1]'
+	self.funcptr = ffi.cast(threadFuncType, funcptr)
+
 	assert(type(arg) == 'nil' or type(arg) == 'cdata')
 	arg = ffi.cast('void*', arg)
-	pthread_assert(pthread.pthread_create(self.id, nil, funcptr, arg))
+
+	local result = ffi.new'pthread_t[1]'
+	pthread_assert(pthread.pthread_create(result, nil, funcptr, arg), 'pthread_create')
+	self.id = result[0]
+end
+
+function Thread:join()
+	local result = ffi.new'void*[1]'
+	pthread_assert(pthread.pthread_join(self.id, result), 'pthread_join')
+	return result[0]
 end
 
 function Thread:__gc()
@@ -55,47 +74,8 @@ function Thread:close()
 	end
 end
 
--- static function
-if ffi.os == 'Windows' then
-	
-	-- TODO proper header generation in include/
-	local kernel32 = ffi.load'kernel32'
-
-	ffi.cdef[[
-
-typedef struct _SYSTEM_INFO {
-	union {
-		uint32_t dwOemId;
-		struct {
-			uint16_t wProcessorArchitecture;
-			uint16_t wReserved;
-		};
-	};
-	uint32_t dwPageSize;
-	void* lpMinimumApplicationAddress;
-	void* lpMaximumApplicationAddress;
-	size_t dwActiveProcessorMask;
-	uint32_t dwNumberOfProcessors;
-	uint32_t dwProcessorType;
-	uint32_t dwAllocationGranularity;
-	uint16_t wProcessorLevel;
-	uint16_t wProcessorRevision;
-} SYSTEM_INFO;
-
-void GetSystemInfo(SYSTEM_INFO* lpSystemInfo);
-]]
-
-	function Thread.numThreads()
-		local sysinfo = ffi.new'SYSTEM_INFO'
-		kernel32.GetSystemInfo(sysinfo)
-		return tonumber(sysinfo.dwNumberOfProcessors)
-	end
-else
-	require 'ffi.req' 'c.unistd'	-- sysconf
-
-	function Thread.numThreads()
-		return tonumber(ffi.C.sysconf(ffi._SC_NPROCESSORS_ONLN))
-	end
+function Thread.numThreads()
+	return tonumber(ffi.C.sysconf(ffi._SC_NPROCESSORS_ONLN))
 end
 
 return Thread
