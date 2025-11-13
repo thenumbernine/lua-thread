@@ -23,6 +23,10 @@ function Mutex:destroy()
 	return 0 == err, err
 end
 
+function Mutex:__gc()
+	self:destroy()
+end
+
 function Mutex:lock()
 	local err = pthread.pthread_mutex_lock(self.id)
 	return 0 == err, err
@@ -33,8 +37,14 @@ function Mutex:unlock()
 	return 0 == err, err
 end
 
-function Mutex:__gc()
-	self:destroy()
+function Mutex:unlockAndReturn(...)
+	assert(self:unlock())
+	return ...
+end
+
+function Mutex:scope(f, ...)
+	self:lock()
+	self:unlockAndReturn(f(...))
 end
 
 return Mutex
