@@ -30,10 +30,24 @@ local Pool = class()
 
 Pool.Worker = Worker
 
+local function getcode(self, code, i)
+	local codetype = type(code)
+	if codetype == 'string' then
+	elseif codetype == 'table' then
+		code = code[i]
+	elseif codetype == 'function' then
+		code = code(self, i-1)
+	else
+		error("can't interpret code of type "..codetype)
+	end
+	assert.type(code, 'string')
+	return code
+end
+
 --[[
 args:
 	size = pool size, defaults to Thread.numThreads()
-	code = string to provide worker code
+	initcode / code = string to provide worker code
 		= table to provide worker code per index (1-based)
 		= function(pool, index) to provide worker code per worker (0-based)
 			where i is the 0-based index
@@ -52,17 +66,9 @@ function Pool:init(args)
 		threadArg.semReady = worker.semReady.id
 		threadArg.semDone = worker.semDone.id
 
-		local code = args.code
-		local codetype = type(code)
-		if type(code) == 'string' then
-		elseif type(code) == 'table' then
-			code = code[i]
-		elseif type(code) == 'function' then
-			code = code(self, i-1)
-		else
-			error("can't interpret code of type "..type(code))
-		end
-		assert.type(code, 'string')
+		local initcode = getcode(self, args.initcode, i)
+		local code = getcode(self, args.code, i)
+
 
 		-- TODO in lua-lua, change the pcalls to use error handlers, AND REPORT THE ERRORS
 		-- TODO how to separate init code vs update code and make it modular ...
@@ -85,10 +91,22 @@ arg = ffi.cast('ThreadArg*', arg)
 -- looks like sem_destroy() can be called multiple times harmlessly, but if it ever crashes on any OS implementation, feel free to insert destroy=function() end to avoid multiple destroy calls.
 local semReady = setmetatable({id=arg.semReady}, Semaphore)
 local semDone = setmetatable({id=arg.semDone}, Semaphore)
+
+<?=initcode or ''?>
+
+semReady:wait()
+while not arg.done do
+
+	<?=code or ''?>
+
+	semDone:post()
+	semReady:wait()
+end
 ]===],			{
 					threadArgTypeCode = threadArgTypeCode,
-				})
-			..code,
+					initcode = initcode,
+					code = code,
+				}),
 			threadArg)
 
 		self[i] = worker
