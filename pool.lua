@@ -140,6 +140,8 @@ local userdata = pool.userdata
 
 <?=initcode or ''?>
 
+sem.sem_wait(arg.semReady)
+
 while true do
 	while true do
 		pthread.pthread_mutex_lock(tasksMutex)

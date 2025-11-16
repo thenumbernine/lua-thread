@@ -22,15 +22,13 @@ local lastsum = 0
 for i=1,2*pool.size do
 	pool:cycle(i)
 
-	ffi.C.usleep(50000)
-
 	-- now we should be able to assert no pool thread is running (how?)
 	-- (can we tell if
 	local sum = 0
 	for j=0,numThreads-1 do
 		sum = sum + poolData[j]
 	end
-	io.write(sum)
+	io.write(sum, ' (should be ', lastsum + i,'):')
 	for j=0,numThreads-1 do
 		io.write(' ', poolData[j])
 	end
