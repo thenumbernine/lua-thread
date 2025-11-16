@@ -140,9 +140,10 @@ local userdata = pool.userdata
 
 <?=initcode or ''?>
 
-sem.sem_wait(arg.semReady)
-
 while true do
+	-- wait til 'pool:ready()' is called
+	sem.sem_wait(arg.semReady)
+
 	local gotEmpty
 	repeat
 		pthread.pthread_mutex_lock(tasksMutex)
@@ -167,8 +168,6 @@ while true do
 
 	-- tell 'pool:wait()' to finish
 	sem.sem_post(arg.semDone)
-	-- wait til 'pool:ready()' is called
-	sem.sem_wait(arg.semReady)
 end
 
 ::done::
