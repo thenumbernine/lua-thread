@@ -31,11 +31,19 @@ function Thread:init(code, arg)
 	--self.lua:load(code)
 
 	-- or lazy way for now, just gen the code inside here:
-	-- TODO lua() call will cast the function closure to a uintptr_t ...
-	-- TODO instead do void* ?
+	-- TODO instead of the extra lua closure, how about using self.lua:load() to load the code as a function, then use the lua lib for calling ffi.cast?
+	-- then call it with xpcall?
+	-- but no, the xpcall needs to be called from the new thread,
+	-- so maybe it is safest to do here?
 	local funcptr = self.lua([[
 local run = function(arg)
+	-- assign a global of the results when it's done
+	_G.results = table.pack(xpcall(function()
 ]]..code..[[
+	end, function(err)
+		return err..'\n'..debug.traceback()
+	end))
+	return nil	-- so it can be cast to void* safely, for the thread's cfunc closure's sake
 end
 
 local ffi = require 'ffi'
@@ -56,9 +64,9 @@ return runClosure
 	end
 	arg = ffi.cast(voidp, arg)
 
-	local result = ffi.new(pthread_t_1)
-	thread_assert(pthread.pthread_create(result, nil, funcptr, arg), 'pthread_create')
-	self.id = result[0]
+	local id = ffi.new(pthread_t_1)
+	thread_assert(pthread.pthread_create(id, nil, funcptr, arg), 'pthread_create')
+	self.id = id[0]
 end
 
 function Thread:join()

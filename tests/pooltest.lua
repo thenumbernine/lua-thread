@@ -22,8 +22,8 @@ local lastsum = 0
 for i=1,2*pool.size do
 	pool:cycle(i)
 
-	-- now we should be able to assert no pool thread is running (how?)
-	-- (can we tell if
+	-- now we should be able to assert no pool thread is running (how?  by testing thread:self()? )
+
 	local sum = 0
 	for j=0,numThreads-1 do
 		sum = sum + poolData[j]
