@@ -66,7 +66,9 @@ Pool.Worker = Worker
 
 local function getcode(self, code, i)
 	local codetype = type(code)
-	if codetype == 'string' then
+	if codetype == 'nil' then
+		return nil
+	elseif codetype == 'string' then
 	elseif codetype == 'table' then
 		code = code[i]
 	elseif codetype == 'function' then
@@ -87,8 +89,12 @@ args:
 			= function(pool, index) to provide worker code per worker (0-based)
 				where i is the 0-based index
 	userdata = user defined cdata ptr or nil
+
+-or-
+args = function or string for it to be handled as args.code would be
 --]]
 function Pool:init(args)
+	if type(args) ~= 'table' then args = {code = args} end
 	self.size = self.size or Thread.numThreads()
 	self.tasksMutex = Mutex()
 	self.poolArg = ffi.new'ThreadPool[1]'
@@ -111,9 +117,9 @@ function Pool:init(args)
 		threadArg.threadIndex = i-1
 		worker.arg = threadArg
 
-		local initcode = args.initcode and getcode(self, args.initcode, i)
+		local initcode = getcode(self, args.initcode, i)
 		local code = getcode(self, args.code, i)
-		local donecode = args.donecode and getcode(self, args.donecode, i)
+		local donecode = getcode(self, args.donecode, i)
 
 		-- TODO in lua-lua, change the pcalls to use error handlers, AND REPORT THE ERRORS
 		-- TODO how to separate init code vs update code and make it modular ...
@@ -230,9 +236,11 @@ function Pool:closed()
 		worker.semDone = nil
 		worker.semReady:destroy()
 		worker.semReady = nil
-		-- destroy thread Lua state:
-		worker.thread:close()
-		worker.thread = nil
+		-- destroy thread Lua state?
+		--worker.thread:close()
+
+-- don't erase worker.thread so soon, the caller might want to examine thread.lua:global'results'
+--		worker.thread = nil
 
 		worker.arg.semReady = nil
 		worker.arg.semDone = nil

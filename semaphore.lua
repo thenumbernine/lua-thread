@@ -10,10 +10,10 @@ local sem_t_1 = ffi.typeof'sem_t[1]'
 
 local Semaphore = class()
 
-function Semaphore:init(n)
+function Semaphore:init(n, shared)
 	n = n or 0
 	self.id = ffi.new(sem_t_1)
-	thread_assert(sem.sem_init(self.id, 0, n), 'sem_init')
+	thread_assert(sem.sem_init(self.id, shared and 1 or 0, n), 'sem_init')
 end
 
 function Semaphore:wait()

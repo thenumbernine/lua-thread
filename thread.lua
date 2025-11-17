@@ -105,7 +105,6 @@ end
 -- TODO pthread_attr_* functions
 -- TODO pthread_*sched* functions
 -- TODO pthread_*cancel* functions
--- TODO pthread_*mutex* functions
 -- TODO pthread_*key* functions
 -- TODO a lot more
 

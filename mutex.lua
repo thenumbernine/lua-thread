@@ -43,7 +43,7 @@ function Mutex:unlockAndReturn(...)
 end
 
 function Mutex:scope(f, ...)
-	self:lock()
+	assert(self:lock())
 	self:unlockAndReturn(f(...))
 end
 
