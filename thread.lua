@@ -4,7 +4,6 @@ local ffi = require 'ffi'
 local class = require 'ext.class'
 local pthread = require 'ffi.req' 'c.pthread'
 require 'ffi.req' 'c.unistd'	-- sysconf
-local Lua = require 'lua'
 local thread_assert = require 'thread.assert'
 
 
@@ -18,13 +17,15 @@ local pthread_t_1 = ffi.typeof'pthread_t[1]'
 
 local Thread = class()
 
+Thread.Lua = require 'lua'
+
 --[[
 code = Lua code to load and run on the new thread
 arg = cdata to pass to the thread
 --]]
 function Thread:init(code, arg)
 	-- each thread needs its own lua_State
-	self.lua = Lua()
+	self.lua = self.Lua()
 
 	-- load our thread code within the new Lua state
 	-- this will put a function on top of self.lua's stack

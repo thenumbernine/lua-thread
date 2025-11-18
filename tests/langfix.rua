@@ -1,0 +1,46 @@
+#!/usr/bin/env rua
+local LuaFixed = require 'lua.langfix'
+
+local Thread = require 'thread'
+Thread.Lua = LuaFixed 
+
+
+local Pool = require 'thread.pool'
+
+local numThreads = Thread.numThreads()
+
+local poolData = ffi.new('int[?]', numThreads)
+
+local pool = Pool{
+	userdata = poolData,
+	size = numThreads,
+	initcode = [[
+local poolData = ffi.cast('int*', userdata)
+]],
+	code = [[
+poolData[threadIndex] += 1
+]],
+}
+
+local lastsum = 0
+for i=1,2*pool.size do
+	pool:cycle(i)
+
+	-- now we should be able to assert no pool thread is running (how?  by testing thread:self()? )
+
+	local sum = 0
+	for j=0,numThreads-1 do
+		sum += poolData[j]
+	end
+	io.write(sum, ' (should be ', lastsum + i,'):')
+	for j=0,numThreads-1 do
+		io.write(' ', poolData[j])
+	end
+	print()
+	if sum ~= lastsum + i then
+		print'!!!! THREADS OUT OF SYNC !!!!'
+	end
+	lastsum = sum
+end
+
+pool:closed()
