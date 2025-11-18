@@ -36,23 +36,31 @@ function Thread:init(code, arg)
 	-- but no, the xpcall needs to be called from the new thread,
 	-- so maybe it is safest to do here?
 	local funcptr = self.lua([[
-local run = function(arg)
+function _G.run(arg)
+	local function collect(exitStatus, ...)
+		_G.exitStatus = exitStatus
+		if not exitStatus then
+			_G.errmsg = ...
+		else
+			_G.results = table.pack(...)
+		end
+	end
+
 	-- assign a global of the results when it's done
-	_G.results = table.pack(xpcall(function()
+	collect(xpcall(function()
 ]]..code..[[
 	end, function(err)
 		return err..'\n'..debug.traceback()
 	end))
+
 	return nil	-- so it can be cast to void* safely, for the thread's cfunc closure's sake
 end
 
-local ffi = require 'ffi'
-local runClosure = ffi.cast(']]..threadFuncTypeName..[[', run)
--- just in case luajit gc's this
+-- just in case luajit gc's this, assign it to _G
 -- in its docs luajit warns that you have to gc the closures manually, so I think I'm safe (except for leaking memory)
-_G.run = run
-_G.runClosure = runClosure
-return runClosure
+local ffi = require 'ffi'
+_G.funcptr = ffi.cast(']]..threadFuncTypeName..[[', _G.run)
+return _G.funcptr
 ]])
 
 	self.funcptr = ffi.cast(threadFuncType, funcptr)

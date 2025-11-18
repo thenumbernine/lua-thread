@@ -16,12 +16,9 @@ typedef struct ThreadPool {
 	// alternatively I could allow overloading & extending this struct ...
 	void * userdata;
 
-	pthread_mutex_t* tasksMutex;
+	pthread_mutex_t* poolMutex;
 
-//only access the rest after grabbing 'tasksMutex'
-// (rename it to 'poolMutex' ?)
-
-	// starts at 0, only access through tasksMutex, threads get tasksMutex then increment this
+	// starts at 0, only access through poolMutex, threads get poolMutex then increment this
 	// if it's at taskCount then set 'gotEmpty' so we can post to our semDone
 	size_t taskIndex;
 
@@ -96,9 +93,12 @@ args = function or string for it to be handled as args.code would be
 function Pool:init(args)
 	if type(args) ~= 'table' then args = {code = args} end
 	self.size = self.size or Thread.numThreads()
-	self.tasksMutex = Mutex()
+
+	-- don't assign poolMutex until after all threads are ctor'd
+	-- that will tell the closed()/__gc() that it's been fully init'd
+	local poolMutex = Mutex()
 	self.poolArg = ffi.new'ThreadPool[1]'
-	self.poolArg[0].tasksMutex = self.tasksMutex.id
+	self.poolArg[0].poolMutex = poolMutex.id
 	self.poolArg[0].done = false
 	local userdata = args.userdata
 	assert(type(userdata) == 'nil' or type(userdata) == 'cdata')
@@ -140,45 +140,58 @@ assert(arg, 'expected thread argument')
 assert.type(arg, 'cdata')
 arg = ffi.cast('ThreadArg*', arg)
 local pool = arg.pool
-local tasksMutex = pool.tasksMutex
+local poolMutex = pool.poolMutex
 local threadIndex = arg.threadIndex
 local userdata = pool.userdata
 
 <?=initcode or ''?>
 
-while true do
-	-- wait til 'pool:ready()' is called
-	sem.sem_wait(arg.semReady)
+-- xpcall here and not inside the loop so we don't xpcall() multiple times
+local results = table.pack(xpcall(function()
+	while true do
+		-- wait til 'pool:ready()' is called
+		sem.sem_wait(arg.semReady)
 
-	local gotEmpty
-	repeat
-		pthread.pthread_mutex_lock(tasksMutex)
-		if pool.done then
-			pthread.pthread_mutex_unlock(tasksMutex)
-			goto done
-		end
-		local task
-		if pool.taskIndex < pool.taskCount then
-			task = pool.taskIndex
-			pool.taskIndex = pool.taskIndex + 1
-		end
-		if pool.taskIndex >= pool.taskCount then
-			gotEmpty = true
-		end
-		pthread.pthread_mutex_unlock(tasksMutex)
+		local gotEmpty
+		repeat
+			pthread.pthread_mutex_lock(poolMutex)
+			if pool.done then
+				pthread.pthread_mutex_unlock(poolMutex)
+				return
+			end
+			local task
+			if pool.taskIndex < pool.taskCount then
+				task = pool.taskIndex
+				pool.taskIndex = pool.taskIndex + 1
+			end
+			if pool.taskIndex >= pool.taskCount then
+				gotEmpty = true
+			end
+			pthread.pthread_mutex_unlock(poolMutex)
 
-		if task then
-			<?=code or ''?>
-		end
-	until gotEmpty
+			if task then
+				<?=code or ''?>
+			end
+		until gotEmpty
 
-	-- tell 'pool:wait()' to finish
+		-- tell 'pool:wait()' to finish
+		sem.sem_post(arg.semDone)
+	end
+end, function(err)
+	return err..'\n'..debug.traceback()
+end))
+
+-- if `code` error'd then we still need to post semDone ...
+if not results[1] then
 	sem.sem_post(arg.semDone)
+	error(results[2])
 end
 
-::done::
-
+-- should this be 'finally' code or nah?
+-- or maybe let the caller clean up and donecode is a bad idea?
 <?=donecode or ''?>
+
+return table.unpack(results, 2, results.n)
 ]===],			{
 					poolTypeCode = poolTypeCode,
 					threadArgTypeCode = threadArgTypeCode,
@@ -190,13 +203,16 @@ end
 
 		self[i] = worker
 	end
+
+	-- only now asisgn poolMutex
+	self.poolMutex = poolMutex
 end
 
 function Pool:ready(size)
-	self.tasksMutex:lock()
+	self.poolMutex:lock()
 	self.poolArg[0].taskIndex = 0
 	self.poolArg[0].taskCount = size or self.size
-	self.tasksMutex:unlock()
+	self.poolMutex:unlock()
 
 	for _,worker in ipairs(self) do
 		worker.semReady:post()
@@ -216,14 +232,14 @@ end
 
 -- pool's closed
 function Pool:closed()
-	-- if we don't have the tasksMutex then we can't really talk to the threads anymore
+	-- if we don't have the poolMutex then we can't really talk to the threads anymore
 	-- so assume it's already closed
-	if not self.tasksMutex then return end
+	if not self.poolMutex then return end
 
 	-- set thread done flag so they will end and we can join them
-	self.tasksMutex:lock()
+	self.poolMutex:lock()
 	self.poolArg[0].done = true
-	self.tasksMutex:unlock()
+	self.poolMutex:unlock()
 
 	for _,worker in ipairs(self) do
 		-- resume so we can shut down
@@ -231,24 +247,25 @@ function Pool:closed()
 
 		-- join <-> wait for it to return
 		worker.thread:join()
+
 		-- destroy semaphores
 		worker.semDone:destroy()
 		worker.semDone = nil
 		worker.semReady:destroy()
 		worker.semReady = nil
-		-- destroy thread Lua state?
-		--worker.thread:close()
 
--- don't erase worker.thread so soon, the caller might want to examine thread.lua:global'results'
---		worker.thread = nil
+		-- destroy thread Lua state?
+		-- nah. don't erase worker.thread so soon, the caller might want to examine thread.lua.global.results
+		--worker.thread:close()
+		--worker.thread = nil
 
 		worker.arg.semReady = nil
 		worker.arg.semDone = nil
 		worker.arg.pool = nil
 	end
 
-	self.tasksMutex:destroy()
-	self.tasksMutex = nil
+	self.poolMutex:destroy()
+	self.poolMutex = nil
 end
 
 function Pool:__gc()
