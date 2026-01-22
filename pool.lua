@@ -94,7 +94,7 @@ args = function or string for it to be handled as args.code would be
 --]]
 function Pool:init(args)
 	if type(args) ~= 'table' then args = {code = args} end
-	self.size = self.size or Thread.numThreads()
+	self.size = args.size or Thread.numThreads()
 
 	-- don't assign poolMutex until after all threads are ctor'd
 	-- that will tell the closed()/__gc() that it's been fully init'd
