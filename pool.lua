@@ -128,8 +128,8 @@ function Pool:init(args)
 		worker.thread = Thread(template([===[
 local ffi = require 'ffi'
 local assert = require 'ext.assert'
-local pthread = require 'ffi.req' 'c.pthread'
-local sem = require 'ffi.req' 'c.semaphore'	-- sem_t
+local Mutex = require 'thread.mutex'
+local Semaphore = require 'thread.semaphore'
 
 -- will ffi.C carry across?
 -- because its the same luajit process?
@@ -143,9 +143,12 @@ assert(arg, 'expected thread argument')
 assert.type(arg, 'cdata')
 arg = ffi.cast(ThreadArgPtrType, arg)
 local pool = arg.pool
-local poolMutex = pool.poolMutex
 local threadIndex = arg.threadIndex
 local userdata = pool.userdata
+
+local poolMutex = Mutex:wrap(pool.poolMutex)
+local semReady = Semaphore:wrap(arg.semReady)
+local semDone = Semaphore:wrap(arg.semDone)
 
 <?=initcode or ''?>
 
@@ -153,13 +156,13 @@ local userdata = pool.userdata
 local results = table.pack(xpcall(function()
 	while true do
 		-- wait til 'pool:ready()' is called
-		sem.sem_wait(arg.semReady)
+		semReady:wait()
 
 		local gotEmpty
 		repeat
-			pthread.pthread_mutex_lock(poolMutex)
+			poolMutex:lock()
 			if pool.done then
-				pthread.pthread_mutex_unlock(poolMutex)
+				poolMutex:unlock()
 				return
 			end
 			local task
@@ -170,7 +173,7 @@ local results = table.pack(xpcall(function()
 			if pool.taskIndex >= pool.taskCount then
 				gotEmpty = true
 			end
-			pthread.pthread_mutex_unlock(poolMutex)
+			poolMutex:unlock()
 
 			if task then
 				<?=code or ''?>
@@ -178,7 +181,7 @@ local results = table.pack(xpcall(function()
 		until gotEmpty
 
 		-- tell 'pool:wait()' to finish
-		sem.sem_post(arg.semDone)
+		semDone:post()
 	end
 end, function(err)
 	return err..'\n'..debug.traceback()
@@ -186,7 +189,7 @@ end))
 
 -- if `code` error'd then we still need to post semDone ...
 if not results[1] then
-	sem.sem_post(arg.semDone)
+	semDone:post()
 	error(results[2])
 end
 

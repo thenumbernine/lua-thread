@@ -6,6 +6,7 @@ local thread_assert = require 'thread.assert'
 
 
 local pthread_mutex_t_1 = ffi.typeof'pthread_mutex_t[1]'
+local pthread_mutex_t_ptr = ffi.typeof'pthread_mutex_t*'
 
 
 local Mutex = class()
@@ -25,6 +26,15 @@ end
 
 function Mutex:__gc()
 	self:destroy()
+end
+
+-- wrap a previously created pthread_mutex_t* and overwrite the destroy function
+-- static method
+function Mutex:wrap(id)
+	return setmetatable({
+		id = ffi.cast(pthread_mutex_t_ptr, id),
+		__gc = function() end,
+	}, Mutex)
 end
 
 function Mutex:lock()

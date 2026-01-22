@@ -82,6 +82,15 @@ return _G.funcptr
 	self.id = id[0]
 end
 
+-- wrap a previously created thread handle
+-- static function
+function Thread:wrap(id)
+	return setmetatable({
+		id = self.id,
+		__gc = function() end,
+	}, Thread)
+end
+
 function Thread:join()
 	local result = voidp_1()
 	thread_assert(pthread.pthread_join(self.id, result), 'pthread_join')

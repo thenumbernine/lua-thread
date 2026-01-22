@@ -6,6 +6,7 @@ local thread_assert = require 'thread.assert'
 
 
 local pthread_cond_t_1 = ffi.typeof'pthread_cond_t[1]'
+local pthread_cond_t_ptr = ffi.typeof'pthread_cond_t*'
 
 
 local Cond = class()
@@ -24,6 +25,15 @@ end
 
 function Cond:__gc()
 	self:destroy()
+end
+
+-- wrap a previously created pthread_cond_t* and overwrite the destroy function
+-- static method
+function Cond:wrap(id)
+	return setmetatable({
+		id = ffi.cast(pthread_cond_t_ptr, id),
+		__gc = function() end,
+	}, Cond)
 end
 
 function Cond:signal()
