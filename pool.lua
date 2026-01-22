@@ -10,8 +10,8 @@ local Mutex = require 'thread.mutex'
 
 local numThreads = Thread.numThreads()
 
-local poolTypeCode = [[
-typedef struct ThreadPool {
+local ThreadPoolTypeCode = [[
+struct {
 	// each thread arg has its own thread arg, for the user
 	// alternatively I could allow overloading & extending this struct ...
 	void * userdata;
@@ -27,33 +27,35 @@ typedef struct ThreadPool {
 
 	// set this to end thread execution
 	bool done;
-} ThreadPool;
+}
 ]]
-ffi.cdef(poolTypeCode)
+local ThreadPoolType = ffi.typeof(ThreadPoolTypeCode)
+
+local ThreadPoolType_1 = ffi.typeof('$[1]', ThreadPoolType)
 
 -- save code separately so the threads can cdef this too
 -- TODO change design to be like Parallel: http://github.com/thenumbernine/Parallel
 -- with critsec-mutex to access job pool, another mutex to notify when done
 -- and only one semaphore-per-thread to notify to wakeup
-local threadArgTypeCode = [[
-typedef struct ThreadArg {
+local ThreadArgTypeCode = [[
+struct {
 	size_t threadIndex;
 
 	//pointer to the shared threadpool info
-	ThreadPool * pool;
+	$ * pool;	// ThreadPoolType
 
 	//each thread sets this when they are done
 	sem_t *semDone;
 
 	//tell each thread to wake up when pool:ready() is called
 	sem_t *semReady;
-} ThreadArg;
+}
 ]]
-ffi.cdef(threadArgTypeCode)
+local ThreadArgType = ffi.typeof(ThreadArgTypeCode, ThreadPoolType)
 
 
 -- TODO should semaphore be created here?
--- TODO how to override ThreadArg?
+-- TODO how to override ThreadArgType?
 local Worker = class()
 
 
@@ -97,7 +99,7 @@ function Pool:init(args)
 	-- don't assign poolMutex until after all threads are ctor'd
 	-- that will tell the closed()/__gc() that it's been fully init'd
 	local poolMutex = Mutex()
-	self.poolArg = ffi.new'ThreadPool[1]'
+	self.poolArg = ThreadPoolType_1()
 	self.poolArg[0].poolMutex = poolMutex.id
 	self.poolArg[0].done = false
 	local userdata = args.userdata
@@ -110,7 +112,7 @@ function Pool:init(args)
 		worker.semDone = Semaphore()
 
 		-- TODO how to allow the caller to override this
-		local threadArg = ffi.new'ThreadArg'
+		local threadArg = ThreadArgType()
 		threadArg.pool = self.poolArg
 		threadArg.semDone = worker.semDone.id
 		threadArg.semReady = worker.semReady.id
@@ -132,13 +134,14 @@ local sem = require 'ffi.req' 'c.semaphore'	-- sem_t
 -- will ffi.C carry across?
 -- because its the same luajit process?
 -- nope, ffi.C is unique per lua-state
-ffi.cdef[[<?=poolTypeCode?>]]
-ffi.cdef[[<?=threadArgTypeCode?>]]
+local ThreadPoolType = ffi.typeof[[<?=ThreadPoolTypeCode?>]]
+local ThreadArgType = ffi.typeof([[<?=ThreadArgTypeCode?>]], ThreadPoolType)
+local ThreadArgPtrType = ffi.typeof('$*', ThreadArgType)
 
 -- holds semaphores etc of the thread
 assert(arg, 'expected thread argument')
 assert.type(arg, 'cdata')
-arg = ffi.cast('ThreadArg*', arg)
+arg = ffi.cast(ThreadArgPtrType, arg)
 local pool = arg.pool
 local poolMutex = pool.poolMutex
 local threadIndex = arg.threadIndex
@@ -193,8 +196,8 @@ end
 
 return table.unpack(results, 2, results.n)
 ]===],			{
-					poolTypeCode = poolTypeCode,
-					threadArgTypeCode = threadArgTypeCode,
+					ThreadPoolTypeCode = ThreadPoolTypeCode,
+					ThreadArgTypeCode = ThreadArgTypeCode,
 					initcode = initcode,
 					code = code,
 					donecode = donecode,

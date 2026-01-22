@@ -11,7 +11,7 @@ local pthread_mutex_t_1 = ffi.typeof'pthread_mutex_t[1]'
 local Mutex = class()
 
 function Mutex:init()
-	self.id = ffi.new(pthread_mutex_t_1)
+	self.id = pthread_mutex_t_1()
 	thread_assert(pthread.pthread_mutex_init(self.id, nil), 'pthread_mutex_init')	-- attrs?
 end
 

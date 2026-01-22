@@ -77,13 +77,13 @@ return _G.funcptr
 	end
 	arg = ffi.cast(voidp, arg)
 
-	local id = ffi.new(pthread_t_1)
+	local id = pthread_t_1()
 	thread_assert(pthread.pthread_create(id, nil, funcptr, arg), 'pthread_create')
 	self.id = id[0]
 end
 
 function Thread:join()
-	local result = ffi.new(voidp_1)
+	local result = voidp_1()
 	thread_assert(pthread.pthread_join(self.id, result), 'pthread_join')
 	return result[0]
 end
