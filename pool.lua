@@ -103,7 +103,9 @@ function Pool:init(args)
 	self.poolArg[0].poolMutex = poolMutex.id
 	self.poolArg[0].done = false
 	local userdata = args.userdata
-	assert(type(userdata) == 'nil' or type(userdata) == 'cdata')
+	if not (type(userdata) == 'nil' or type(userdata) == 'cdata') then
+		error("userdata must be nil or cdata, got "..type(userdata))
+	end
 	self.poolArg[0].userdata = userdata
 
 	for i=1,self.size do
