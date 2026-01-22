@@ -33,7 +33,7 @@ end
 function Semaphore:wrap(id)
 	return setmetatable({
 		id = ffi.cast(sem_t_ptr, id),
-		__gc = function() end,
+		destroy = function() end,
 	}, Semaphore)
 end
 

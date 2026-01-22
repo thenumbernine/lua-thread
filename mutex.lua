@@ -33,7 +33,7 @@ end
 function Mutex:wrap(id)
 	return setmetatable({
 		id = ffi.cast(pthread_mutex_t_ptr, id),
-		__gc = function() end,
+		destroy = function() end,
 	}, Mutex)
 end
 

@@ -87,7 +87,7 @@ end
 function Thread:wrap(id)
 	return setmetatable({
 		id = self.id,
-		__gc = function() end,
+		close = function() end,
 	}, Thread)
 end
 

@@ -32,7 +32,7 @@ end
 function Cond:wrap(id)
 	return setmetatable({
 		id = ffi.cast(pthread_cond_t_ptr, id),
-		__gc = function() end,
+		destroy = function() end,
 	}, Cond)
 end
 
