@@ -88,7 +88,7 @@ args:
 			= function(pool, index) to provide worker code per worker (0-based)
 				where i is the 0-based index
 	userdata = user defined cdata ptr or nil
-
+	threadInit = thread init after Lua state is created and before thread is run
 -or-
 args = function or string for it to be handled as args.code would be
 --]]
@@ -127,7 +127,10 @@ function Pool:init(args)
 
 		-- TODO in lua-lua, change the pcalls to use error handlers, AND REPORT THE ERRORS
 		-- TODO how to separate init code vs update code and make it modular ...
-		worker.thread = Thread(template([===[
+		worker.thread = Thread{
+			arg = threadArg,
+			init = args.threadInit,
+			code = template([===[
 local ffi = require 'ffi'
 local assert = require 'ext.assert'
 local Mutex = require 'thread.mutex'
@@ -200,14 +203,14 @@ end
 <?=donecode or ''?>
 
 return table.unpack(results, 2, results.n)
-]===],			{
-					ThreadPoolTypeCode = ThreadPoolTypeCode,
-					ThreadArgTypeCode = ThreadArgTypeCode,
-					initcode = initcode,
-					code = code,
-					donecode = donecode,
-				}),
-			threadArg)
+]===],		{
+				ThreadPoolTypeCode = ThreadPoolTypeCode,
+				ThreadArgTypeCode = ThreadArgTypeCode,
+				initcode = initcode,
+				code = code,
+				donecode = donecode,
+			}),
+		}
 
 		self[i] = worker
 	end

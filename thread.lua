@@ -12,6 +12,7 @@ local threadFuncType = ffi.typeof(threadFuncTypeName)
 
 local voidp = ffi.typeof'void*'
 local voidp_1 = ffi.typeof'void*[1]'
+local pthread_t = ffi.typeof'pthread_t'
 local pthread_t_1 = ffi.typeof'pthread_t[1]'
 
 
@@ -24,10 +25,19 @@ else
 end
 
 --[[
-code = Lua code to load and run on the new thread
-arg = cdata to pass to the thread
+args:
+	code = Lua code to load and run on the new thread
+	arg = cdata to pass to the thread
+	init = callback function to run on the thread to initialize the new Lua state before starting the thread
+-or-
+args = code of the thread
 --]]
-function Thread:init(code, arg)
+function Thread:init(args)
+	if type(args) == 'string' then args = {code = args} end
+
+	local code = args.code
+	local arg = args.arg
+
 	-- each thread needs its own lua_State
 	self.lua = self.Lua()
 
@@ -68,6 +78,10 @@ _G.funcptr = ffi.cast(']]..threadFuncTypeName..[[', _G.run)
 return _G.funcptr
 ]])
 
+	if args.init then
+		args.init(self)
+	end
+
 	self.funcptr = ffi.cast(threadFuncType, funcptr)
 
 	self.arg = arg	-- store before cast, so nils stay nils, for ease of truth testing
@@ -79,14 +93,14 @@ return _G.funcptr
 
 	local id = pthread_t_1()
 	thread_assert(pthread.pthread_create(id, nil, funcptr, arg), 'pthread_create')
-	self.id = id[0]
+	self.id = pthread_t(id[0])
 end
 
 -- wrap a previously created thread handle
 -- static function
 function Thread:wrap(id)
 	return setmetatable({
-		id = self.id,
+		id = pthread_t(self.id),
 		close = function() end,
 	}, Thread)
 end
