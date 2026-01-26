@@ -7,6 +7,8 @@ but moved the Lua calls into their own [library](https://github.com/thenumbernin
 and replaced the convenience of function-serialization and error-handling with code-injection,
 which probably makes the result of this a lot more like [LuaLanes](https://github.com/LuaLanes/lanes).
 
+Windows compatability via [pthread4w](https://github.com/williamtu/pthread4w).
+
 # thread.lua
 
 - `thread = Thread(code, [arg])` = wrapper for `pthread_create`.
