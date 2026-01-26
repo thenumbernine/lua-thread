@@ -3,7 +3,7 @@ require 'ext.gc'	-- enable __gc for Lua tables in LuaJIT
 local ffi = require 'ffi'
 local class = require 'ext.class'
 local pthread = require 'ffi.req' 'c.pthread'
-require 'ffi.req' 'c.unistd'	-- sysconf
+local unistd = require 'ffi.req' 'c.unistd'	-- sysconf
 local thread_assert = require 'thread.assert'
 
 
@@ -156,7 +156,7 @@ function Thread:close()
 end
 
 function Thread.numThreads()
-	return tonumber(ffi.C.sysconf(ffi.C._SC_NPROCESSORS_ONLN))
+	return tonumber(unistd.sysconf(unistd._SC_NPROCESSORS_ONLN))
 end
 
 return Thread

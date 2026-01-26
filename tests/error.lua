@@ -53,7 +53,7 @@ do
 	end))
 
 	assert.eq(results[1], false)
-	assert(results[2]:find"unexpected symbol near ';'")
+	assert(results[2]:find"unexpected symbol near ';'", results[2])
 end
 
 -- make sure thread pools init code runtime errors fail correctly
