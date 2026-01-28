@@ -1,0 +1,25 @@
+--------------------------------------------
+-- generated with dist/build-distinfo.rua --
+--------------------------------------------
+
+name = "thread"
+files = {
+	"README.md",
+	"assert.lua",
+	"cond.lua",
+	"mutex.lua",
+	"pool.lua",
+	"semaphore.lua",
+	"tests/error.lua",
+	"tests/poolidle.lua",
+	"tests/pooltest.lua",
+	"tests/pooltest.rua",
+	"tests/test.lua",
+	"thread.lua",
+}
+deps = {
+	"ext",
+	"ffi",
+	"lua",
+	"template",
+}
