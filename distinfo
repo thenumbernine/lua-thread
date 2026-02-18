@@ -7,6 +7,7 @@ files = {
 	"README.md",
 	"assert.lua",
 	"cond.lua",
+	"lite.lua",
 	"mutex.lua",
 	"pool.lua",
 	"semaphore.lua",
