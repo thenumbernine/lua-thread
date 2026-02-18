@@ -159,4 +159,11 @@ function Thread.numThreads()
 	return tonumber(unistd.sysconf(unistd._SC_NPROCESSORS_ONLN))
 end
 
+function Thread:showErr(msg)
+	local WG = self.lua.global
+	if not WG.exitStatus then
+		io.stderr:write((msg and msg..' ' or 'thread '..tostring(self))..'error '..tostring(WG.errmsg)..'\n')
+	end
+end
+
 return Thread

@@ -285,10 +285,7 @@ end
 
 function Pool:showErrs()
 	for i,worker in ipairs(self) do
-		local WG = worker.thread.lua.global
-		if not WG .exitStatus then
-			io.stderr:write('worker '..i..' got error '..tostring(WG.errmsg)..'\n')
-		end
+		worker.thread:showErr('worker '..i)
 	end
 end
 
