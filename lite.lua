@@ -20,16 +20,16 @@ end
 --[[
 args:
 	code = Lua code to load and run on the new thread
-	arg = cdata to pass to the thread
-	init = callback function to run on the thread to initialize the new Lua state before starting the thread
 -or-
 args = code of the thread
 --]]
 function LiteThread:init(args)
-	if type(args) == 'string' then args = {code = args} end
-
-	local code = args.code
-	local arg = args.arg
+	local code
+	if type(args) == 'string' then
+		code = args
+	else
+		code = args.code
+	end
 
 	-- each thread needs its own lua_State
 	self.lua = self.Lua()
@@ -71,17 +71,7 @@ _G.funcptr = ffi.cast(']]..threadFuncTypeName..[[', _G.run)
 return _G.funcptr
 ]])
 
-	if args.init then
-		args.init(self)
-	end
-
 	self.funcptr = ffi.cast(threadFuncType, funcptr)
-
-	self.arg = arg	-- store before cast, so nils stay nils, for ease of truth testing
-	local argtype = type(arg)
-	if not (argtype == 'nil' or argtype == 'cdata') then
-		error("I don't know how to pass arg of type "..argtype.." into a new thread")
-	end
 end
 
 function LiteThread:__gc()
@@ -102,4 +92,4 @@ function LiteThread:showErr(msg)
 	end
 end
 
-return LiteThread 
+return LiteThread

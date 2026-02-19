@@ -14,8 +14,27 @@ local pthread_t_1 = ffi.typeof'pthread_t[1]'
 
 local Thread = LiteThread:subclass()
 
-function Thread:init(...)
-	Thread.super.init(self, ...)
+--[[
+args:
+	code = code, handled by super
+	arg = cdata to pass to the thread
+	init = callback function to run on the thread to initialize the new Lua state before starting the thread
+--]]
+function Thread:init(args)
+	Thread.super.init(self, args)
+
+	if type(args) == 'string' then args = {code = args} end
+	local arg = args.arg
+
+	if args.init then
+		args.init(self)
+	end
+
+	self.arg = arg	-- store before cast, so nils stay nils, for ease of truth testing
+	local argtype = type(arg)
+	if not (argtype == 'nil' or argtype == 'cdata') then
+		error("I don't know how to pass arg of type "..argtype.." into a new thread")
+	end
 
 	local id = pthread_t_1()
 	thread_assert(pthread.pthread_create(
