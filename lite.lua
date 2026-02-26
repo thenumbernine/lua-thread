@@ -92,4 +92,11 @@ function LiteThread:showErr(msg)
 	end
 end
 
+function LiteThread:assertErr(msg)
+	local WG = self.lua.global
+	if not WG.exitStatus then
+		error((msg and msg..' ' or 'thread '..tostring(self))..'error '..tostring(WG.errmsg))
+	end
+end
+
 return LiteThread
