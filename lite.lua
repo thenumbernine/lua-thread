@@ -18,17 +18,24 @@ else
 end
 
 --[[
+args = code of the thread, to be inserted and run on the new Lua state.
+	-or-
+args = function of the thread, to be converted and run on the new Lua state.
+	-or-
 args:
 	code = Lua code to load and run on the new thread
--or-
-args = code of the thread
+	func = Lua function to call upon init
 --]]
 function LiteThread:init(args)
-	local code
+	local code	-- init with code
+	local func	-- init with function
 	if type(args) == 'string' then
 		code = args
+	elseif type(code) == 'function' then
+		func = code
 	else
 		code = args.code
+		func = args.func
 	end
 
 	-- each thread needs its own lua_State
@@ -37,13 +44,14 @@ function LiteThread:init(args)
 	-- load our thread code within the new Lua state
 	-- this will put a function on top of self.lua's stack
 	--self.lua:load(code)
-
 	-- or lazy way for now, just gen the code inside here:
 	-- TODO instead of the extra lua closure, how about using self.lua:load() to load the code as a function, then use the lua lib for calling ffi.cast?
 	-- then call it with xpcall?
 	-- but no, the xpcall needs to be called from the new thread,
 	-- so maybe it is safest to do here?
 	local funcptr = self.lua([[
+local runArg = ...
+
 function _G.run(arg)
 	local function collect(exitStatus, ...)
 		_G.exitStatus = exitStatus
@@ -56,7 +64,13 @@ function _G.run(arg)
 
 	-- assign a global of the results when it's done
 	collect(xpcall(function()
-]]..code..[[
+
+-- separate code with a do / end block to prevent any call syntax from messing with the next statement
+do
+]]..(code or '')..[[
+end
+	if runArg then runArg() end
+
 	end, function(err)
 		return err..'\n'..debug.traceback()
 	end))
@@ -69,7 +83,7 @@ end
 local ffi = require 'ffi'
 _G.funcptr = ffi.cast(']]..threadFuncTypeName..[[', _G.run)
 return _G.funcptr
-]])
+]], func)
 
 	self.funcptr = ffi.cast(threadFuncType, funcptr)
 end
@@ -83,6 +97,12 @@ function LiteThread:close()
 		self.lua:close()
 		self.lua = nil
 	end
+end
+
+function LiteThread:getErr(msg)
+	local WG = self.lua.global
+	if WG.exitStatus then return true end
+	return false, (msg and msg..' ' or 'thread '..tostring(self))..'error '..tostring(WG.errmsg)
 end
 
 function LiteThread:showErr(msg)

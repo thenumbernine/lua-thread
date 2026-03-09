@@ -1,5 +1,4 @@
 -- posix threads library
-require 'ext.gc'	-- enable __gc for Lua tables in LuaJIT
 local ffi = require 'ffi'
 local pthread = require 'ffi.req' 'c.pthread'
 local unistd = require 'ffi.req' 'c.unistd'	-- sysconf
