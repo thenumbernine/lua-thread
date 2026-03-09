@@ -64,13 +64,13 @@ function _G.run(arg)
 
 	-- assign a global of the results when it's done
 	collect(xpcall(function()
-
--- separate code with a do / end block to prevent any call syntax from messing with the next statement
-do
+		-- separate code with a do / end block to prevent any call syntax from messing with the next statement
+		do
 ]]..(code or '')..[[
-end
-	if runArg then runArg() end
-
+		end
+		if runArg then
+			runArg(arg)
+		end
 	end, function(err)
 		return err..'\n'..debug.traceback()
 	end))
