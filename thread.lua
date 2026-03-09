@@ -16,13 +16,20 @@ local Thread = LiteThread:subclass()
 --[[
 args:
 	code = code, handled by super
+	func = func, handled by super
 	arg = cdata to pass to the thread
 	init = callback function to run on the thread to initialize the new Lua state before starting the thread
+-or- string = thread code
+-or- function = thread function
 --]]
 function Thread:init(args)
 	Thread.super.init(self, args)
 
-	if type(args) == 'string' then args = {code = args} end
+	if type(args) == 'string' then
+		args = {code = args}
+	elseif type(args) == 'function' then
+		args = {func = args}
+	end
 	local arg = args.arg
 
 	if args.init then
