@@ -31,9 +31,9 @@ function LiteThread:init(args)
 	local func	-- init with function
 	if type(args) == 'string' then
 		code = args
-	elseif type(code) == 'function' then
-		func = code
-	else
+	elseif type(args) == 'function' then
+		func = args
+	elseif type(args) == 'table' then
 		code = args.code
 		func = args.func
 	end
