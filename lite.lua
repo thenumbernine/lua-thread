@@ -23,6 +23,9 @@ args = code of the thread, to be inserted and run on the new Lua state.
 args = function of the thread, to be converted and run on the new Lua state.
 	-or-
 args:
+	init = initialization callback to run on self,
+		useful for initializing the Lua state and before the Lua state is used to create the callback,
+		(i.e. if there's any typedefs that need to go in it for the ffi.cast of the function-pointer to work)
 	code = Lua code to load and run on the new thread
 	func = Lua function to call upon init
 --]]
@@ -40,6 +43,10 @@ function LiteThread:init(args)
 
 	-- each thread needs its own lua_State
 	self.lua = self.Lua()
+
+	if args.init then
+		args.init(self)
+	end
 
 	-- load our thread code within the new Lua state
 	-- this will put a function on top of self.lua's stack
