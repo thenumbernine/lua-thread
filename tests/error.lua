@@ -30,10 +30,10 @@ error'here'
 
 	-- still need to join error'd thread
 	thread:join()
-	local exitStatus = thread.lua.global.exitStatus
+	local exitStatus = thread:getExitStatus()
 	assert.eq(exitStatus, false)
 
-	local errmsg = thread.lua.global.errmsg
+	local errmsg = thread:getErrMsg()
 	assert(errmsg:find'here')
 
 	local results = thread.lua.global.results
@@ -67,10 +67,10 @@ do
 	pool:closed()
 
 	for _,worker in ipairs(pool) do
-		local exitStatus = worker.thread.lua.global.exitStatus
+		local exitStatus = worker.thread:getExitStatus()
 		assert.eq(exitStatus, false)
 
-		local errmsg = worker.thread.lua.global.errmsg
+		local errmsg = worker.thread:getErrMsg()
 		assert(errmsg:find'pools closed')
 
 		local results = worker.thread.lua.global.results
@@ -90,10 +90,10 @@ do
 	pool:closed()
 
 	for _,worker in ipairs(pool) do
-		local exitStatus = worker.thread.lua.global.exitStatus
+		local exitStatus = worker.thread:getExitStatus()
 		assert.eq(exitStatus, false)
 
-		local errmsg = worker.thread.lua.global.errmsg
+		local errmsg = worker.thread:getErrMsg()
 		assert(errmsg:find'pools closed')
 
 		local results = worker.thread.lua.global.results

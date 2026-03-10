@@ -5,11 +5,11 @@ local ffi = require 'ffi'
 local class = require 'ext.class'
 
 
-local threadFuncTypeName = 'void*(*)(void*)'
-local threadFuncType = ffi.typeof(threadFuncTypeName)
-
-
 local LiteThread = class()
+
+-- Has to be a string for code-injection's sake, for carrying across threads' Lua states.
+-- (because I don't have any certain way to pass ctypes across Lua states.)
+LiteThread.threadFuncTypeName = 'void*(*)(void*)'
 
 if langfix then
 	LiteThread.Lua = require 'lua.langfix'
@@ -50,42 +50,56 @@ function LiteThread:init(args)
 	-- but no, the xpcall needs to be called from the new thread,
 	-- so maybe it is safest to do here?
 	local funcptr = self.lua([[
-local runArg = ...
+require 'ext.xpcall'(_G)	-- make sure xpcall arg fwding exists
+local func = ...			-- ... is func
 
-function _G.run(arg)
+local reg = debug.getregistry()
+
+-- xpcall safety wrapper of the function, so we can capture Lua errors and record them in the Lua state
+-- (otherwise how does lua() handle errors?  does it immediately raise them in the parent?)
+local function safefunc(...)
 	local function collect(exitStatus, ...)
-		_G.exitStatus = exitStatus
+		reg.exitStatus = exitStatus
 		if not exitStatus then
-			_G.errmsg = ...
+			reg.errmsg = ...
 		else
-			_G.results = table.pack(...)
+			reg.results = table.pack(...)
 		end
 	end
 
 	-- assign a global of the results when it's done
-	collect(xpcall(function()
-		-- separate code with a do / end block to prevent any call syntax from messing with the next statement
-		do
+	collect(xpcall(
+		function(...)
+
+			-- arg is backwards compat. I gotta clean this all up eventually
+			local arg = ...
+
+			do	-- separate code with a do / end block to prevent any call syntax from messing with the next statement
 ]]..(code or '')..[[
-		end
-		if runArg then
-			runArg(arg)
-		end
-	end, function(err)
-		return err..'\n'..debug.traceback()
-	end))
+			end
+			if func then
+				func(...)
+			end
+		end,
+		nil,	-- default handler appends traceback
+		...		-- fwd args
+	))
 
 	return nil	-- so it can be cast to void* safely, for the thread's cfunc closure's sake
 end
 
--- just in case luajit gc's this, assign it to _G
+reg.safefunc = safefunc	-- must attach so it doesnt gc
+
+-- just in case luajit gc's this, assign it to registry
 -- in its docs luajit warns that you have to gc the closures manually, so I think I'm safe (except for leaking memory)
 local ffi = require 'ffi'
-_G.funcptr = ffi.cast(']]..threadFuncTypeName..[[', _G.run)
-return _G.funcptr
+
+reg.funcptr = ffi.cast(']]..self.threadFuncTypeName..[[', safefunc)
+
+return reg.funcptr	-- return the closure
 ]], func)
 
-	self.funcptr = ffi.cast(threadFuncType, funcptr)
+	self.funcptr = ffi.cast(self.threadFuncTypeName, funcptr)
 end
 
 function LiteThread:__gc()
@@ -99,24 +113,31 @@ function LiteThread:close()
 	end
 end
 
+function LiteThread:getExitStatus()
+	return self.lua[[ return debug.getregistry().exitStatus ]]
+end
+
+function LiteThread:getErrMsg()
+	return self.lua[[ return debug.getregistry().errmsg ]]
+end
+
+-- redundant ... why do I have this?
 function LiteThread:getErr(msg)
-	local WG = self.lua.global
-	if WG.exitStatus then return true end
-	return false, (msg and msg..' ' or 'thread '..tostring(self))..'error '..tostring(WG.errmsg)
+	if self:getExitStatus() then return true end
+	local errmsg = self:getErrMsg()
+	return false, (msg and msg..' ' or 'thread '..tostring(self))..'error '..tostring(errmsg)
 end
 
 function LiteThread:showErr(msg)
-	local WG = self.lua.global
-	if not WG.exitStatus then
-		io.stderr:write((msg and msg..' ' or 'thread '..tostring(self))..'error '..tostring(WG.errmsg)..'\n')
-	end
+	if self:getExitStatus() then return true end
+	local errmsg = self:getErrMsg()
+	io.stderr:write((msg and msg..' ' or 'thread '..tostring(self))..'error '..tostring(errmsg)..'\n')
 end
 
 function LiteThread:assertErr(msg)
-	local WG = self.lua.global
-	if not WG.exitStatus then
-		error((msg and msg..' ' or 'thread '..tostring(self))..'error '..tostring(WG.errmsg))
-	end
+	if self:getExitStatus() then return true end
+	local errmsg = self.lua[[ return debug.getregistry().errmsg ]]
+	error((msg and msg..' ' or 'thread '..tostring(self))..'error '..tostring(errmsg))
 end
 
 return LiteThread
