@@ -28,6 +28,8 @@ args:
 		(i.e. if there's any typedefs that need to go in it for the ffi.cast of the function-pointer to work)
 	code = Lua code to load and run on the new thread
 	func = Lua function to call upon init
+
+	threadFuncTypeName = override the thread function C type, default is pthread type
 --]]
 function LiteThread:init(args)
 	local code	-- init with code
@@ -39,7 +41,11 @@ function LiteThread:init(args)
 	elseif type(args) == 'table' then
 		code = args.code
 		func = args.func
+
+		-- allow override
+		self.threadFuncTypeName = args.threadFuncTypeName
 	end
+
 
 	-- each thread needs its own lua_State
 	self.lua = self.Lua()
