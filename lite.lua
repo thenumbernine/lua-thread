@@ -46,7 +46,6 @@ function LiteThread:init(args)
 		self.threadFuncTypeName = args.threadFuncTypeName
 	end
 
-
 	-- each thread needs its own lua_State
 	self.lua = self.Lua()
 
@@ -62,6 +61,14 @@ function LiteThread:init(args)
 	-- then call it with xpcall?
 	-- but no, the xpcall needs to be called from the new thread,
 	-- so maybe it is safest to do here?
+	self.funcptr = self:createFuncPtr(self.threadFuncTypeName, func, code)
+end
+
+--[[
+for a Lua function 'func' or Lua code 'code',
+create a new closure, cast it to funcptr, and return it
+--]]
+function LiteThread:createFuncPtr(threadFuncTypeName, func, code)
 	local funcptr = self.lua([[
 require 'ext.xpcall'(_G)	-- make sure xpcall arg fwding exists
 local func = ...			-- ... is func
@@ -101,18 +108,22 @@ local function safefunc(...)
 	return nil	-- so it can be cast to void* safely, for the thread's cfunc closure's sake
 end
 
-reg.safefunc = safefunc	-- must attach so it doesnt gc
+-- must attach so it doesnt gc
+reg.thread_funcs = reg.thread_funcs or {}
+table.insert(reg.thread_funcs, safefunc)
 
 -- just in case luajit gc's this, assign it to registry
 -- in its docs luajit warns that you have to gc the closures manually, so I think I'm safe (except for leaking memory)
 local ffi = require 'ffi'
 
-reg.funcptr = ffi.cast(']]..self.threadFuncTypeName..[[', safefunc)
+reg.thread_closures = reg.thread_closures or {}
+local funcptr = ffi.cast(']]..threadFuncTypeName..[[', safefunc)
+table.insert(reg.thread_closures, funcptr)
 
-return reg.funcptr	-- return the closure
+return funcptr	-- return the closure
 ]], func)
 
-	self.funcptr = ffi.cast(self.threadFuncTypeName, funcptr)
+	return ffi.cast(threadFuncTypeName, funcptr)
 end
 
 function LiteThread:__gc()
