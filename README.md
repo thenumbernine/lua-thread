@@ -30,7 +30,6 @@ This is a child-Lua-state that wraps and runs a function, either provided by cod
 - `lite.lua.debug.getregistry().thread_funcs[funckey].safefunc` = holds the Lua function that is cast and run as the function in the child  Lua state.
 - `lite.lua.debug.getregistry().thread_funcs[funckey].exitStatus` = upon finish, sets to `true` if succeeded and `false` if error occurred.
 - `lite.lua.debug.getregistry().thread_funcs[funckey].errmsg ` = upon `exitStatus==false`, this will hold the error message.
-- `lite.lua.debug.getregistry().thread_funcs[funckey].results ` = upon `exitStatus==true`, this will hold a table of all values returned from `code`.
 
 - `lite:getExitStatus(funckey)` = gets the exit status of the function associated with `funckey`, which is a hex string of funcptr.
 - `lite:getErrMsg(funckey)` = gets the error message of the function associated with `funckey`.

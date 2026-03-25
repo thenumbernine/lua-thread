@@ -98,15 +98,39 @@ function LiteThread:createFuncPtr(
 	assert(code, "createFuncPtr expects code")
 
 	local funcptr = self.lua(
-(initCode or '')
-..[[
+(initCode or '')..[[
+
 local safefunc
 local funcinfo
 function safefunc(...)
 	-- This function will be run on a dif thread,
 	-- albeit from within the same Lua state
 
+	-- use `funcinfo` which is an element of the reg.thread_funcs
+	-- TODO alternatively ...
+	-- could I use thread.lua to invoke this with pcall and then read the error state off its stack?
+	-- but that wouldn't help me in using this with multithreaded C APIs ...
+	return (function(exitStatus, ...)
+		funcinfo.exitStatus = exitStatus
+		if not exitStatus then
+			funcinfo.errmsg = ...
+		else
+			return ...
+		end
+
+	-- xpcall safety wrapper of the function, so we can capture Lua errors and record them in the Lua state
+	-- (otherwise how does lua() handle errors?  does it immediately raise them in the parent?)
+	end)(xpcall(
+		function(...)
+
 ]]..code..[[
+
+		end,
+		function(err)
+			return err..'\n'..debug.traceback()	-- I could use ext.xpcall but meh
+		end,	-- handler appends traceback
+		...		-- fwd args
+	))
 end
 
 -- just in case luajit gc's this, assign it to registry

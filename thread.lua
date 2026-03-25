@@ -44,44 +44,18 @@ function Thread:init(args)
 		self.threadFuncTypeName,
 		-- initCode:
 		[[
-require 'ext.xpcall'(_G)	-- make sure xpcall arg fwding exists
 local func = ...			-- ... is func
 ]],
 		-- function code
 		[[
-
--- use `funcinfo` which is an element of the reg.thread_funcs
-local function collect(exitStatus, ...)
-	funcinfo.exitStatus = exitStatus
-	if not exitStatus then
-		funcinfo.errmsg = ...
-	else
-		funcinfo.results = table.pack(...)
-	end
-end
-
--- xpcall safety wrapper of the function, so we can capture Lua errors and record them in the Lua state
--- (otherwise how does lua() handle errors?  does it immediately raise them in the parent?)
-collect(xpcall(
-	function(...)
-		-- our xpcall function arg ...
-		local arg = ...
-
+-- our xpcall function arg ...
+local arg = ...
 ]]..(args.code or '')..[[
-
 ]]..(args.func and [[
-		do	-- separate code with a do / end block to prevent any call syntax from messing with the next statement
-			func(...)
-		end
-]] or '')..[[
-
-	end,
-	nil,	-- default handler appends traceback
-	...		-- fwd args
-))
-
-return nil	-- so it can be cast to void* safely, for the thread's cfunc closure's sake
-]],
+do	-- separate code with a do / end block to prevent any call syntax from messing with the next statement
+	func(...)
+end
+]] or ''),
 		-- initCode ... args follow:
 		args.func
 	)
