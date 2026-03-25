@@ -1,7 +1,21 @@
--- This is everything that goes into thread/thread.lua except the pthread stuff
--- It's useful for encasing Lua environments in other platforms' threads, i.e. in Java
+--[[
+This is everything that goes into thread/thread.lua except the pthread stuff
+It's useful for encasing Lua environments in other platforms' threads, i.e. in Java
+
+
+TODO
+- get rid of 'func' ... or move it into thread.thread.  only use inline code.
+- get rid of xpcall and exitStatus and results ... move those into thread.thread as well.
+- get rid of ctor args as well.
+
+This will just be:
+1) wrapper of a lua state
+2) helper-function for creating, saving, and returning closures within the state
+
+--]]
 require 'ext.gc'	-- enable __gc for Lua tables in LuaJIT
 local ffi = require 'ffi'
+local assert = require 'ext.assert'
 local class = require 'ext.class'
 
 
@@ -27,7 +41,6 @@ args:
 		useful for initializing the Lua state and before the Lua state is used to create the callback,
 		(i.e. if there's any typedefs that need to go in it for the ffi.cast of the function-pointer to work)
 	code = Lua code to load and run on the new thread
-	func = Lua function to call upon init
 
 	threadFuncTypeName = override the thread function C type, default is pthread type
 --]]
@@ -37,14 +50,13 @@ function LiteThread:init(args)
 
 
 	local code	-- init with code
-	local func	-- init with function
-	if type(args) == 'string' then
-		code = args
-	elseif type(args) == 'function' then
-		func = args
-	elseif type(args) == 'table' then
+	if args ~= nil then
+		if type(args) == 'string' then
+			code = args
+		end
+		assert.type(args, 'table')
+
 		code = args.code
-		func = args.func
 
 		-- allow override
 		self.threadFuncTypeName = args.threadFuncTypeName
@@ -54,12 +66,9 @@ function LiteThread:init(args)
 		end
 	end
 
-
 	-- hmm, new concept, using the same Lua state for multiple Lua-functions
 	-- in this case I would want to initialize lite threads with no functions up front, and add to it later
-	if func ~= nil
-	or code ~= nil
-	then
+	if code ~= nil then
 		-- load our thread code within the new Lua state
 		-- this will put a function on top of self.lua's stack
 		--self.lua:load(code)
@@ -68,88 +77,55 @@ function LiteThread:init(args)
 		-- then call it with xpcall?
 		-- but no, the xpcall needs to be called from the new thread,
 		-- so maybe it is safest to do here?
-		self.funcptr = self:createFuncPtr(self.threadFuncTypeName, func, code)
+		self.funcptr = self:createFuncPtr(self.threadFuncTypeName, '', code)
 	end
 end
 
 --[[
-for a Lua function 'func' or Lua code 'code',
+for Lua code 'code',
 create a new closure, cast it to funcptr, and return it
-
-TODO I gave 'func' as lua-function a chance
-but its such a mess with upvalues
-that I do regret it, and should and will take it out soon.
-
-Same with 'arg', get rid of that too.
 
 So 'initCode' runs with ... from this function's extra args (upon init)
 and 'code' runs with ... from teh function call.
 --]]
-function LiteThread:createFuncPtr(threadFuncTypeName, func, code, initCode, ...)
-	local funcptr = self.lua([[
-require 'ext.xpcall'(_G)	-- make sure xpcall arg fwding exists
-local func = ...			-- ... is func
+function LiteThread:createFuncPtr(
+	threadFuncTypeName,	-- optional, nil defaults to self.threadFuncTypeName
+	initCode,			-- optional, nil
+	code,				-- required
+	...
+)
+	--
+	assert(code, "createFuncPtr expects code")
 
-]]..(initCode or '')..[[
-
-local reg = debug.getregistry()
-
--- xpcall safety wrapper of the function, so we can capture Lua errors and record them in the Lua state
--- (otherwise how does lua() handle errors?  does it immediately raise them in the parent?)
-local function safefunc(...)
+	local funcptr = self.lua(
+(initCode or '')
+..[[
+local safefunc
+local funcinfo
+function safefunc(...)
 	-- This function will be run on a dif thread,
 	-- albeit from within the same Lua state
 
-	-- TODO for multiple functions in a luaState,
-	-- we will have to store multiple results,
-	-- but only a single exit-status
-	-- TODO hmm, maybe I should decouple results from exitStatus?
-	-- or TODO how about get rid of safefunc() and just make sure to run funcptr with a xpcall that captures the call stack?
-	local function collect(exitStatus, ...)
-		reg.exitStatus = exitStatus
-		if not exitStatus then
-			reg.errmsg = ...
-		else
-			reg.results = table.pack(...)
-		end
-	end
-
-	-- assign a global of the results when it's done
-	collect(xpcall(
-		function(...)
-
-			-- arg is backwards compat. I gotta clean this all up eventually
-			local arg = ...
-
-]]..(code or '')..[[
-
-]]..(func and [[
-			do	-- separate code with a do / end block to prevent any call syntax from messing with the next statement
-				func(...)
-			end
-]] or '')..[[
-		end,
-		nil,	-- default handler appends traceback
-		...		-- fwd args
-	))
-
-	return nil	-- so it can be cast to void* safely, for the thread's cfunc closure's sake
+]]..code..[[
 end
-
--- must attach so it doesnt gc
-reg.thread_funcs = reg.thread_funcs or {}
-table.insert(reg.thread_funcs, safefunc)
 
 -- just in case luajit gc's this, assign it to registry
 -- in its docs luajit warns that you have to gc the closures manually, so I think I'm safe (except for leaking memory)
 local ffi = require 'ffi'
-
-reg.thread_closures = reg.thread_closures or {}
 local funcptr = ffi.cast(']]..threadFuncTypeName..[[', safefunc)
-table.insert(reg.thread_closures, funcptr)
+
+-- key = string of hex of ptr of safefunc
+local funckey = bit.tohex(ffi.cast('uintptr_t', funcptr), bit.lshift(ffi.sizeof'uintptr_t', 1))
+
+-- save the closure and callback in reg so it doesnt gc
+-- use key as funcptr so you can later store other stuff like exitStatus
+local reg = debug.getregistry()
+reg.thread_funcs = reg.thread_funcs or {}
+funcinfo = {funcptr=funcptr, safefunc=safefunc}
+reg.thread_funcs[funckey] = funcinfo
 
 return funcptr	-- return the closure
-]], func, ...)
+]], ...)
 
 	return ffi.cast(threadFuncTypeName, funcptr)
 end
@@ -165,39 +141,24 @@ function LiteThread:close()
 	end
 end
 
+-- since lite-thread is made for multiple functions
+-- you will need to provide your own funckey to retrieve exit status
+-- generate it with the same method of funckey assignment above.
 
--- TODO all this exitStatus stuf is currently setup for a single callback
--- but I just decoupled single-function from lite-thread
--- so best TODO is only invoke funcptr's returned with an xpcall from the thread.lua state
--- (and not from within its own Lua code)
--- (because successive of those will overwrite a fail exit status)
--- and another TODO is to move the .results stuff into thread.thread
-
-function LiteThread:getExitStatus()
-	return self.lua[[ return debug.getregistry().exitStatus ]]
+function LiteThread:getExitStatus(funckey)
+	assert.type(funckey, 'string')
+	return self.lua([[
+local funckey = ...
+return debug.getregistry().thread_funcs[funckey].exitStatus
+]], funckey)
 end
 
-function LiteThread:getErrMsg()
-	return self.lua[[ return debug.getregistry().errmsg ]]
-end
-
--- redundant ... why do I have this?
-function LiteThread:getErr(msg)
-	if self:getExitStatus() then return true end
-	local errmsg = self:getErrMsg()
-	return false, (msg and msg..' ' or 'thread '..tostring(self))..'error '..tostring(errmsg)
-end
-
-function LiteThread:showErr(msg)
-	if self:getExitStatus() then return true end
-	local errmsg = self:getErrMsg()
-	io.stderr:write((msg and msg..' ' or 'thread '..tostring(self))..'error '..tostring(errmsg)..'\n')
-end
-
-function LiteThread:assertErr(msg)
-	if self:getExitStatus() then return true end
-	local errmsg = self.lua[[ return debug.getregistry().errmsg ]]
-	error((msg and msg..' ' or 'thread '..tostring(self))..'error '..tostring(errmsg))
+function LiteThread:getErrMsg(funckey)
+	assert.type(funckey, 'string')
+	return self.lua([[
+local funckey = ...
+return debug.getregistry().thread_funcs[funckey].errmsg
+]], funckey)
 end
 
 return LiteThread

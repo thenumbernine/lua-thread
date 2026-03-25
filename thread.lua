@@ -1,5 +1,6 @@
 -- posix threads library
 local ffi = require 'ffi'
+local assert = require 'ext.assert'
 local pthread = require 'ffi.req' 'c.pthread'
 local unistd = require 'ffi.req' 'c.unistd'	-- sysconf
 local LiteThread = require 'thread.lite'
@@ -19,13 +20,76 @@ with the addition of:
 	arg = cdata to pass to the thread
 --]]
 function Thread:init(args)
-	Thread.super.init(self, args)
+	if type(args) == 'string' then
+		args = {code=args}
+	elseif type(args) == 'function' then
+		args = {func=args}
+	end
+	assert.type(args, 'table')
+	assert(args.code or args.func, "thread needs either .code or .func")
 
-	local arg
-	if type(args) == 'table' then
-		arg = args.arg
+	-- do super init with empty state ...
+	Thread.super.init(self)
+
+	-- handle args.init now
+	if args.init then
+		args.init(self)
 	end
 
+	-- now build our wrapper ...
+	self.threadFuncTypeName = args.threadFuncTypeName	-- allow override
+
+	self.funcptr = self:createFuncPtr(
+		-- threadFuncTypeName:
+		self.threadFuncTypeName,
+		-- initCode:
+		[[
+require 'ext.xpcall'(_G)	-- make sure xpcall arg fwding exists
+local func = ...			-- ... is func
+]],
+		-- function code
+		[[
+
+-- use `funcinfo` which is an element of the reg.thread_funcs
+local function collect(exitStatus, ...)
+	funcinfo.exitStatus = exitStatus
+	if not exitStatus then
+		funcinfo.errmsg = ...
+	else
+		funcinfo.results = table.pack(...)
+	end
+end
+
+-- xpcall safety wrapper of the function, so we can capture Lua errors and record them in the Lua state
+-- (otherwise how does lua() handle errors?  does it immediately raise them in the parent?)
+collect(xpcall(
+	function(...)
+		-- our xpcall function arg ...
+		local arg = ...
+
+]]..(args.code or '')..[[
+
+]]..(args.func and [[
+		do	-- separate code with a do / end block to prevent any call syntax from messing with the next statement
+			func(...)
+		end
+]] or '')..[[
+
+	end,
+	nil,	-- default handler appends traceback
+	...		-- fwd args
+))
+
+return nil	-- so it can be cast to void* safely, for the thread's cfunc closure's sake
+]],
+		-- initCode ... args follow:
+		args.func
+	)
+
+	-- used to access results from reg.thread_funcs[]
+	self.funckey = bit.tohex(ffi.cast('uintptr_t', self.funcptr), bit.lshift(ffi.sizeof'uintptr_t', 1))
+
+	local arg = args.arg
 	self.arg = arg	-- store before cast, so nils stay nils, for ease of truth testing
 	local argtype = type(arg)
 	if not (argtype == 'nil' or argtype == 'cdata') then
@@ -93,5 +157,38 @@ end
 function Thread.numThreads()
 	return tonumber(unistd.sysconf(unistd._SC_NPROCESSORS_ONLN))
 end
+
+
+
+-- all these are a bit redundant ... why do I have this?
+-- TODO any of these should verify that the pthread is no longer running first,
+-- otherwise you will have two threads touching the same lua state at the same time
+
+function Thread:getExitStatus()
+	return Thread.super.getExitStatus(self, self.funckey)
+end
+
+function Thread:getErrMsg()
+	return Thread.super.getErrMsg(self, self.funckey)
+end
+
+function Thread:getErr(msg)
+	if self:getExitStatus() then return true end
+	local errmsg = self:getErrMsg()
+	return false, (msg and msg..' ' or 'thread '..tostring(self))..'error '..tostring(errmsg)
+end
+
+function Thread:showErr(msg)
+	if self:getExitStatus() then return true end
+	local errmsg = self:getErrMsg()
+	io.stderr:write((msg and msg..' ' or 'thread '..tostring(self))..'error '..tostring(errmsg)..'\n')
+end
+
+function Thread:assertErr(msg)
+	if self:getExitStatus() then return true end
+	local _, errmsg = self:getErrMsg()
+	error((msg and msg..' ' or 'thread '..tostring(self))..'error '..tostring(errmsg))
+end
+
 
 return Thread

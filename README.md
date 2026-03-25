@@ -17,22 +17,23 @@ This is a thread pool, made for fast repeated execution of tasks.
 
 This is a child-Lua-state that wraps and runs a function, either provided by code or by Lua function.  No threading is involved.
 
-- `lite = Lite(arg)` = wrapper for a Lua state that accepts either string for Lua code, a Lua function, or a table containing `.code` or `.function`.
+- `lite = Lite(arg)` = wrapper for a Lua state that accepts a string for Lua code, or a table containing `.code` or `.init`.
 - `Lite.__gc()` = calls `Lite:close()` on garbage collection to close the Lua state.
 
 - `lite:close()` = closes the Lua state.
-- `lite:getErr()` = if an error occurred in the child Lua state, returns false and any error that had occurred and captured in the lite child-Lua-state.  Returns true otherwise.
-- `lite:showErr()` = if an error occured in the child Lua state, writes it to stderr.
-- `lite:assertErr()` = if an error occurred in the child Lua state, throws an error in the parent Lua state.
 
-- `lite.funcptr` = holds the C function closure of the Lua function from the parent Lua state.
 - `lite.lua` = holds the child `lua_State`.
-- `lite.lua.run` = holds the Lua function that is cast and run as the function in the child  Lua state.
-- `lite.lua.funcptr` = holds the C function closure that the Lua function is cast to, in the child Lua state.
 
-- `lite.lua.global.exitStatus` = upon finish, sets to `true` if succeeded and `false` if error occurred.
-- `lite.lua.global.errmsg ` = upon `exitStatus==false`, this will hold the error message.
-- `lite.lua.global.results ` = upon `exitStatus==true`, this will hold a table of all values returned from `code`.
+- `lite.funcptr` = If you passed `.code` into ctor then this holds the C function closure of the Lua function from the parent Lua state.
+
+- `lite.lua.debug.getregistry().thread_funcs[funckey].funcptr` = holds the C function closure that the Lua function is cast to, in the child Lua state.
+- `lite.lua.debug.getregistry().thread_funcs[funckey].safefunc` = holds the Lua function that is cast and run as the function in the child  Lua state.
+- `lite.lua.debug.getregistry().thread_funcs[funckey].exitStatus` = upon finish, sets to `true` if succeeded and `false` if error occurred.
+- `lite.lua.debug.getregistry().thread_funcs[funckey].errmsg ` = upon `exitStatus==false`, this will hold the error message.
+- `lite.lua.debug.getregistry().thread_funcs[funckey].results ` = upon `exitStatus==true`, this will hold a table of all values returned from `code`.
+
+- `lite:getExitStatus(funckey)` = gets the exit status of the function associated with `funckey`, which is a hex string of funcptr.
+- `lite:getErrMsg(funckey)` = gets the error message of the function associated with `funckey`.
 
 # thread.lua
 
@@ -50,6 +51,14 @@ This is an implementation of LiteThread but for pthread callbacks.
 
 - `thread.id` = holds the `pthread_t` of the thread.
 - `thread.arg` = holds the `arg` passed to the ctor.
+- `thread.funcptr` = holds the `funcptr` passed to the ctor.
+- `thread.funckey` = holds the `funckey` of the `funcptr`
+
+- `thread:getExitStatus()` = calls `lite:getExitStatus()` but using this function's saved `funckey`.
+- `thread:getErrMsg()` = calls `lite:getErrMsg()` but using this function's saved `funckey`.
+- `thread:getErr(extraMsg)` = if an error occurred in the child Lua state, returns false and any error that had occurred and captured in the lite child-Lua-state.  Returns true otherwise.
+- `thread:showErr(extraMsg)` = if an error occured in the child Lua state, writes it to stderr.
+- `thread:assertErr(extraMsg)` = if an error occurred in the child Lua state, throws an error in the parent Lua state.
 
 # semaphore.lua
 
