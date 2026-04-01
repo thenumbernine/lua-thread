@@ -34,8 +34,6 @@ end
 --[[
 args = code of the thread, to be inserted and run on the new Lua state.
 	-or-
-args = function of the thread, to be converted and run on the new Lua state.
-	-or-
 args:
 	init = initialization callback to run on self,
 		useful for initializing the Lua state and before the Lua state is used to create the callback,
@@ -47,7 +45,6 @@ args:
 function LiteThread:init(args)
 	-- each thread needs its own lua_State
 	self.lua = self.Lua()
-
 
 	local code	-- init with code
 	if args ~= nil then
