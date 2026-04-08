@@ -5,6 +5,7 @@ local sem = require 'ffi.req' 'c.semaphore'	-- sem_t
 local thread_assert = require 'thread.assert'
 
 
+local int_1 = ffi.typeof'int[1]'
 local sem_t_1 = ffi.typeof'sem_t[1]'
 local sem_t_ptr = ffi.typeof'sem_t*'
 
@@ -37,14 +38,46 @@ function Semaphore:wrap(id)
 	}, Semaphore)
 end
 
+function Semaphore:close()
+	local err = sem.sem_close(self.id)
+	return 0 == err, err
+end
+
+-- TODO sem_unlink but names ...
+
 function Semaphore:wait()
 	local err = sem.sem_wait(self.id)
+	return 0 == err, err
+end
+
+-- dt is a `struct timespec *` ffi.new
+function Semaphore:timedwait(dt)
+	assert(dt, "expected dt")
+	local err = sem.sem_timedwait(self.id, dt)
+	return 0 == err, err
+end
+
+function Semaphore:trywait()
+	local err = sem.sem_trywait(self.id)
 	return 0 == err, err
 end
 
 function Semaphore:post()
 	local err = sem.sem_post(self.id)
 	return 0 == err, err
+end
+
+-- should this return true/value and value
+-- or should this return value and error on fail?
+-- I'll do like pcall, true/false then value
+function Semaphore:getvalue()
+	local value = int_1()
+	local err = sem.sem_getvalue(self.id, value)
+	if 0 == err then
+		return true, value[0]
+	else
+		return false, err
+	end
 end
 
 return Semaphore
