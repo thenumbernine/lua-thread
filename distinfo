@@ -3,10 +3,13 @@
 --------------------------------------------
 
 name = "thread"
+git = "https://github.com/thenumbernine/lua-thread"
+
 files = {
 	"README.md",
 	"assert.lua",
 	"cond.lua",
+	"distinfo",
 	"lite.lua",
 	"mutex.lua",
 	"pool.lua",
@@ -18,6 +21,11 @@ files = {
 	"tests/test.lua",
 	"thread.lua",
 }
+if targetOS == "Windows" and targetArch == "x64" then
+	table.append(files, {
+		"bin/Windows/x64/pthreadVC3.dll",
+	})
+end
 deps = {
 	"ext",
 	"ffi",
